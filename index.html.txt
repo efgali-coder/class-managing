@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>כלי עזר למחנך - מערכת ניהול כיתה ופנימייה</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Rubik', 'Heebo', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts: Rubik & Heebo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- React 18 & Babel UMD -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Rubik', 'Heebo', sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        /* Custom scrollbar for tables */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+
+    <div id="root"></div>
+
+    <!-- React Application Logic -->
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useCallback } = React;
+
+        // Default initial data for demo
+        const INITIAL_STUDENTS = [
+            { id: '1', name: 'אורי כהן', group: 'א5', notes: 'רגישות ללקטוז' },
+            { id: '2', name: 'דניאל לוי', group: 'א5', notes: 'קשיי הקשבה' },
+            { id: '3', name: 'שירה אברהם', group: 'א5', notes: 'תורנית כיתה' },
+            { id: '4', name: 'נועם מזרחי', group: 'א5', notes: '' },
+            { id: '5', name: 'תמר פרידמן', group: 'א5', notes: 'מצטיינת' }
+        ];
+
+        const INITIAL_CUSTOM_COLUMNS = [
+            { id: 'c1', name: 'הערות משמעת', type: 'text' },
+            { id: 'c2', name: 'מצב רוח', type: 'text' }
+        ];
+
+        // Format Date YYYY-MM-DD
+        const getTodayString = () => {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        // Google Apps Script code template to be shown for user setup
+        const GOOGLE_APPS_SCRIPT_CODE = `// ==========================================
+// Google Apps Script עבור "כלי עזר למחנך"
+// ==========================================
+
+function doGet(e) {
+  var scriptProperties = PropertiesService.getScriptProperties();
+  var data = scriptProperties.getProperty('EDUCATOR_APP_DATA');
+  
+  if (!data) {
+    data = JSON.stringify({ students: [], customColumns: [], dailyLogs: {} });
+  }
+  
+  return ContentService.createTextOutput(data)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    var postData = e.postData.contents;
+    var parsed = JSON.parse(postData);
+    
+    var scriptProperties = PropertiesService.getScriptProperties();
+    scriptProperties.setProperty('EDUCATOR_APP_DATA', JSON.stringify({
+      students: parsed.students || [],
+      customColumns: parsed.customColumns || [],
+      dailyLogs: parsed.dailyLogs || {},
+      lastUpdated: new Date().toISOString()
+    }));
+    
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "success", 
+      timestamp: new Date().toISOString() 
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "error", 
+      message: err.toString() 
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+        // Standard Toast Alert Component
+        const Toast = ({ message, type, onClose }) => {
+            if (!message) return null;
+            const bg = type === 'error' ? 'bg-rose-600' : type === 'warning' ? 'bg-amber-600' : 'bg-emerald-600';
+            const icon = type === 'error' ? 'fa-circle-exclamation' : type === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-check';
+            return (
+                <div className={`fixed bottom-5 left-5 z-50 flex items-center gap-3 text-white px-5 py-3 rounded-xl shadow-xl transition-all animate-bounce ${bg}`}>
+                    <i className={`fa-solid ${icon} text-lg`}></i>
+                    <span className="font-medium text-sm">{message}</span>
+                    <button onClick={onClose} className="mr-2 opacity-80 hover:opacity-100">
+                        <i className="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            );
+        };
+
+        // Confirmation Modal Component
+        const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">{title}</h3>
+                        <p className="text-slate-600 text-sm mb-6 leading-relaxed">{message}</p>
+                        <div className="flex justify-end gap-3">
+                            <button 
+                                onClick={onCancel}
+                                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition"
+                            >
+                                ביטול
+                            </button>
+                            <button 
+                                onClick={onConfirm}
+                                className="px-4 py-2 text-sm font-medium text-white bg-rose-600 rounded-xl hover:bg-rose-700 shadow-sm transition"
+                            >
+                                אישור
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Main App Component
+        function App() {
+            // LocalStorage persistence
+            const [students, setStudents] = useState(() => {
+                const saved = localStorage.getItem('educator_students');
+                return saved ? JSON.parse(saved) : INITIAL_STUDENTS;
+            });
+
+            const [customColumns, setCustomColumns] = useState(() => {
+                const saved = localStorage.getItem('educator_custom_cols');
+                return saved ? JSON.parse(saved) : INITIAL_CUSTOM_COLUMNS;
+            });
+
+            const [dailyLogs, setDailyLogs] = useState(() => {
+                const saved = localStorage.getItem('educator_daily_logs');
+                return saved ? JSON.parse(saved) : {};
+            });
+
+            // Google Sheets Sync Settings
+            const [googleScriptUrl, setGoogleScriptUrl] = useState(() => {
+                return localStorage.getItem('educator_google_url') || '';
+            });
+
+            const [autoSync, setAutoSync] = useState(() => {
+                return localStorage.getItem('educator_auto_sync') === 'true';
+            });
+
+            const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'syncing', 'success', 'error'
+            const [lastSyncTime, setLastSyncTime] = useState(() => {
+                return localStorage.getItem('educator_last_sync') || '';
+            });
+
+            const [selectedDate, setSelectedDate] = useState(getTodayString());
+            const [activeTab, setActiveTab] = useState('daily'); // 'daily', 'reports', 'manage', 'sync'
+            const [toast, setToast] = useState({ message: '', type: 'info' });
+            
+            // Confirm modal state
+            const [confirmState, setConfirmState] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+
+            // Filters & Searches
+            const [searchQuery, setSearchQuery] = useState('');
+            
+            // Student Report filters
+            const [reportStudentId, setReportStudentId] = useState('');
+            const [reportStartDate, setReportStartDate] = useState(() => {
+                const d = new Date();
+                d.setDate(d.getDate() - 30);
+                return d.toISOString().split('T')[0];
+            });
+            const [reportEndDate, setReportEndDate] = useState(getTodayString());
+
+            // Save state updates to LocalStorage
+            useEffect(() => {
+                localStorage.setItem('educator_students', JSON.stringify(students));
+            }, [students]);
+
+            useEffect(() => {
+                localStorage.setItem('educator_custom_cols', JSON.stringify(customColumns));
+            }, [customColumns]);
+
+            useEffect(() => {
+                localStorage.setItem('educator_daily_logs', JSON.stringify(dailyLogs));
+            }, [dailyLogs]);
+
+            useEffect(() => {
+                localStorage.setItem('educator_google_url', googleScriptUrl);
+            }, [googleScriptUrl]);
+
+            useEffect(() => {
+                localStorage.setItem('educator_auto_sync', autoSync ? 'true' : 'false');
+            }, [autoSync]);
+
+            const showToast = (message, type = 'success') => {
+                setToast({ message, type });
+                setTimeout(() => setToast({ message: '', type: 'info' }), 4000);
+            };
+
+            const triggerConfirm = (title, message, onConfirm) => {
+                setConfirmState({
+                    isOpen: true,
+                    title,
+                    message,
+                    onConfirm: () => {
+                        onConfirm();
+                        setConfirmState({ isOpen: false, title: '', message: '', onConfirm: null });
+                    }
+                });
+            };
+
+            // Push state to Google Apps Script
+            const syncPushToGoogle = async (customUrl = null) => {
+                const targetUrl = customUrl || googleScriptUrl;
+                if (!targetUrl) {
+                    showToast('נא להגדיר כתובת Google Apps Script קודם', 'warning');
+                    return;
+                }
+
+                setSyncStatus('syncing');
+                try {
+                    const payload = {
+                        students,
+                        customColumns,
+                        dailyLogs
+                    };
+
+                    const response = await fetch(targetUrl, {
+                        method: 'POST',
+                        mode: 'no-cors', // Apps script standard endpoint cross-origin
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const nowStr = new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+                    setSyncStatus('success');
+                    setLastSyncTime(nowStr);
+                    localStorage.setItem('educator_last_sync', nowStr);
+                    showToast('הנתונים נשלחו וסונכרנו בהצלחה מול Google!');
+                } catch (err) {
+                    console.error("Google Sync Push Error:", err);
+                    setSyncStatus('error');
+                    showToast('שגיאה בסנכרון מול Google Sheets', 'error');
+                }
+            };
+
+            // Pull state from Google Apps Script
+            const syncPullFromGoogle = async (customUrl = null) => {
+                const targetUrl = customUrl || googleScriptUrl;
+                if (!targetUrl) {
+                    showToast('נא להגדיר כתובת Google Apps Script קודם', 'warning');
+                    return;
+                }
+
+                setSyncStatus('syncing');
+                try {
+                    const response = await fetch(targetUrl);
+                    if (!response.ok) throw new Error('Network error');
+                    const data = await response.json();
+
+                    if (data.students && Array.isArray(data.students)) {
+                        setStudents(data.students);
+                    }
+                    if (data.customColumns && Array.isArray(data.customColumns)) {
+                        setCustomColumns(data.customColumns);
+                    }
+                    if (data.dailyLogs && typeof data.dailyLogs === 'object') {
+                        setDailyLogs(data.dailyLogs);
+                    }
+
+                    const nowStr = new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+                    setSyncStatus('success');
+                    setLastSyncTime(nowStr);
+                    localStorage.setItem('educator_last_sync', nowStr);
+                    showToast('הנתונים נטענו בהצלחה מ-Google Sheets!');
+                } catch (err) {
+                    console.error("Google Sync Pull Error:", err);
+                    setSyncStatus('error');
+                    showToast('שגיאה בטעינת נתונים מ-Google Sheets', 'error');
+                }
+            };
+
+            // Trigger auto-sync if enabled
+            useEffect(() => {
+                if (autoSync && googleScriptUrl && syncStatus !== 'syncing') {
+                    const timer = setTimeout(() => {
+                        syncPushToGoogle();
+                    }, 3000); // Debounce 3s
+                    return () => clearTimeout(timer);
+                }
+            }, [students, customColumns, dailyLogs, autoSync, googleScriptUrl]);
+
+            // Get or initialize log entry for a student on a specific date
+            const getLogEntry = (date, studentId) => {
+                if (dailyLogs[date] && dailyLogs[date][studentId]) {
+                    return dailyLogs[date][studentId];
+                }
+                return {
+                    prayerStatus: 'present', // 'present', 'absent', 'late_justified', 'late_unjustified'
+                    prayerNote: '',
+                    releaseStatus: 'none', // 'none', 'approved', 'rejected', 'pending'
+                    releaseExitTime: '',
+                    releaseReturnTime: '',
+                    releaseReason: '',
+                    personalTalk: false,
+                    personalTalkSummary: '',
+                    parentTalk: false,
+                    parentTalkContact: 'אמא', // 'אמא', 'אבא', 'אפוטרופוס', 'אחר'
+                    parentTalkSummary: '',
+                    customValues: {}
+                };
+            };
+
+            // Update specific field in student log
+            const updateLogEntry = (studentId, field, value) => {
+                setDailyLogs(prev => {
+                    const dateLogs = prev[selectedDate] || {};
+                    const currentEntry = getLogEntry(selectedDate, studentId);
+                    
+                    const updatedEntry = { ...currentEntry };
+
+                    if (field.startsWith('custom_')) {
+                        const colId = field.replace('custom_', '');
+                        updatedEntry.customValues = {
+                            ...updatedEntry.customValues,
+                            [colId]: value
+                        };
+                    } else {
+                        updatedEntry[field] = value;
+                    }
+
+                    return {
+                        ...prev,
+                        [selectedDate]: {
+                            ...dateLogs,
+                            [studentId]: updatedEntry
+                        }
+                    };
+                });
+            };
+
+            // Quick mark all as Present for today's prayer
+            const handleMarkAllPrayerPresent = () => {
+                setDailyLogs(prev => {
+                    const dateLogs = prev[selectedDate] || {};
+                    const updatedDateLogs = { ...dateLogs };
+                    
+                    students.forEach(st => {
+                        const existing = getLogEntry(selectedDate, st.id);
+                        updatedDateLogs[st.id] = {
+                            ...existing,
+                            prayerStatus: 'present'
+                        };
+                    });
+
+                    return { ...prev, [selectedDate]: updatedDateLogs };
+                });
+                showToast('סומנו כל התלמידים כנוכחים בתפילה');
+            };
+
+            // Filtered students for search
+            const filteredStudents = useMemo(() => {
+                if (!searchQuery.trim()) return students;
+                const q = searchQuery.toLowerCase();
+                return students.filter(s => 
+                    s.name.toLowerCase().includes(q) || 
+                    (s.group && s.group.toLowerCase().includes(q)) ||
+                    (s.notes && s.notes.toLowerCase().includes(q))
+                );
+            }, [students, searchQuery]);
+
+            // Export to CSV with UTF-8 BOM so Hebrew is displayed correctly in Excel
+            const exportToCSV = (filename, headers, rows) => {
+                const processRow = row => row.map(val => {
+                    let cell = val === null || val === undefined ? '' : String(val);
+                    cell = cell.replace(/"/g, '""');
+                    if (cell.search(/("|,|\n)/g) >= 0) cell = `"${cell}"`;
+                    return cell;
+                }).join(',');
+
+                const csvLines = [headers.join(','), ...rows.map(processRow)];
+                const csvContent = '\uFEFF' + csvLines.join('\n');
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('הקובץ יורד למחשבך בהצלחה');
+            };
+
+            // Export current date summary
+            const exportDailySummary = () => {
+                const headers = ['שם התלמיד', 'קבוצה/כיתה', 'נוכחות בתפילה', 'הערת תפילה', 'סטטוס שחרור', 'שעת יציאה', 'שעת חזרה', 'סיבת שחרור', 'שיחה אישית', 'סיכום שיחה אישית', 'שיחה עם הורים', 'גורם מעורב', 'סיכום שיחת הורים'];
+                customColumns.forEach(c => headers.push(c.name));
+
+                const rows = filteredStudents.map(st => {
+                    const log = getLogEntry(selectedDate, st.id);
+                    const prayerText = {
+                        present: 'נוכח',
+                        absent: 'נעדר',
+                        late_justified: 'איחור מוצדק',
+                        late_unjustified: 'איחור לא מוצדק'
+                    }[log.prayerStatus] || '';
+
+                    const releaseText = {
+                        none: 'ללא שחרור',
+                        approved: 'אושר',
+                        rejected: 'נדחה',
+                        pending: 'ממתין'
+                    }[log.releaseStatus] || '';
+
+                    const row = [
+                        st.name,
+                        st.group || '',
+                        prayerText,
+                        log.prayerNote,
+                        releaseText,
+                        log.releaseExitTime,
+                        log.releaseReturnTime,
+                        log.releaseReason,
+                        log.personalTalk ? 'כן' : 'לא',
+                        log.personalTalkSummary,
+                        log.parentTalk ? 'כן' : 'לא',
+                        log.parentTalkContact,
+                        log.parentTalkSummary
+                    ];
+
+                    customColumns.forEach(c => {
+                        row.push((log.customValues && log.customValues[c.id]) || '');
+                    });
+
+                    return row;
+                });
+
+                exportToCSV(`דוח_יומי_${selectedDate}.csv`, headers, rows);
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Header Nav */}
+                    <header className="bg-slate-900 text-white shadow-lg sticky top-0 z-40">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex items-center justify-between h-16">
+                                {/* Logo & Title */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-500 flex items-center justify-center shadow-md text-white font-bold text-xl">
+                                        <i className="fa-solid fa-graduation-cap"></i>
+                                    </div>
+                                    <div>
+                                        <h1 className="font-bold text-lg leading-tight tracking-wide">כלי עזר למחנך</h1>
+                                        <p className="text-xs text-slate-400 font-light">ניהול, תיעוד ומעקב פדגוגי ופנימייתי</p>
+                                    </div>
+                                </div>
+
+                                {/* Navigation Tabs */}
+                                <nav className="flex items-center gap-1 sm:gap-2">
+                                    <button
+                                        onClick={() => setActiveTab('daily')}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                                            activeTab === 'daily' 
+                                                ? 'bg-brand-600 text-white shadow-md' 
+                                                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        <i className="fa-solid fa-calendar-day"></i>
+                                        <span className="hidden sm:inline">רישום יומי</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('reports')}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                                            activeTab === 'reports' 
+                                                ? 'bg-brand-600 text-white shadow-md' 
+                                                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        <i className="fa-solid fa-id-card"></i>
+                                        <span className="hidden sm:inline">כרטיס תלמיד</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('manage')}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                                            activeTab === 'manage' 
+                                                ? 'bg-brand-600 text-white shadow-md' 
+                                                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        <i className="fa-solid fa-users-gear"></i>
+                                        <span className="hidden sm:inline">ניהול כיתה</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('sync')}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                                            activeTab === 'sync' 
+                                                ? 'bg-emerald-600 text-white shadow-md' 
+                                                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        <i className="fa-solid fa-cloud-arrow-up"></i>
+                                        <span className="hidden sm:inline">סנכרון Google</span>
+                                    </button>
+                                </nav>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Top Sync Status Sub-Bar */}
+                    <div className="bg-slate-800 border-b border-slate-700 text-slate-300 text-xs py-1.5 px-4">
+                        <div className="max-w-7xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="font-medium text-slate-400">סטטוס סנכרון:</span>
+                                {googleScriptUrl ? (
+                                    syncStatus === 'syncing' ? (
+                                        <span className="inline-flex items-center gap-1.5 text-amber-400 font-semibold animate-pulse">
+                                            <i className="fa-solid fa-rotate animate-spin"></i> מסתנכרן מול Google Sheets...
+                                        </span>
+                                    ) : syncStatus === 'error' ? (
+                                        <span className="inline-flex items-center gap-1.5 text-rose-400 font-semibold">
+                                            <i className="fa-solid fa-circle-exclamation"></i> שגיאה בסנכרון (לחץ לניסיון חוזר)
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold">
+                                            <i className="fa-solid fa-cloud-check"></i> מסונכרן מול Google Sheets {lastSyncTime && `(${lastSyncTime})`}
+                                        </span>
+                                    )
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 text-slate-400">
+                                        <i className="fa-solid fa-hard-drive text-amber-500"></i> עובד במצב מקומי (LocalStorage בלבד)
+                                    </span>
+                                )}
+                            </div>
+
+                            <button 
+                                onClick={() => setActiveTab('sync')}
+                                className="text-emerald-400 hover:underline flex items-center gap-1 font-medium"
+                            >
+                                <i className="fa-solid fa-gear"></i> הגדרות סנכרון
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Main Content View */}
+                    <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                        {activeTab === 'daily' && (
+                            <DailyDashboard 
+                                students={filteredStudents}
+                                totalStudentsCount={students.length}
+                                selectedDate={selectedDate}
+                                setSelectedDate={setSelectedDate}
+                                getLogEntry={getLogEntry}
+                                updateLogEntry={updateLogEntry}
+                                customColumns={customColumns}
+                                handleMarkAllPrayerPresent={handleMarkAllPrayerPresent}
+                                searchQuery={searchQuery}
+                                setSearchQuery={setSearchQuery}
+                                exportDailySummary={exportDailySummary}
+                            />
+                        )}
+
+                        {activeTab === 'reports' && (
+                            <StudentReportView 
+                                students={students}
+                                dailyLogs={dailyLogs}
+                                customColumns={customColumns}
+                                reportStudentId={reportStudentId}
+                                setReportStudentId={setReportStudentId}
+                                reportStartDate={reportStartDate}
+                                setReportStartDate={setReportStartDate}
+                                reportEndDate={reportEndDate}
+                                setReportEndDate={setReportEndDate}
+                                exportToCSV={exportToCSV}
+                            />
+                        )}
+
+                        {activeTab === 'manage' && (
+                            <ClassManagementView 
+                                students={students}
+                                setStudents={setStudents}
+                                customColumns={customColumns}
+                                setCustomColumns={setCustomColumns}
+                                showToast={showToast}
+                                triggerConfirm={triggerConfirm}
+                                setDailyLogs={setDailyLogs}
+                            />
+                        )}
+
+                        {activeTab === 'sync' && (
+                            <GoogleSyncView 
+                                googleScriptUrl={googleScriptUrl}
+                                setGoogleScriptUrl={setGoogleScriptUrl}
+                                autoSync={autoSync}
+                                setAutoSync={setAutoSync}
+                                syncPushToGoogle={syncPushToGoogle}
+                                syncPullFromGoogle={syncPullFromGoogle}
+                                syncStatus={syncStatus}
+                                lastSyncTime={lastSyncTime}
+                                showToast={showToast}
+                            />
+                        )}
+                    </main>
+
+                    {/* Footer */}
+                    <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
+                        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+                            <span>כלי עזר למחנך © {new Date().getFullYear()} - ניהול כיתה פנימייתי חכם</span>
+                            <span className="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full font-medium">
+                                <i className="fa-solid fa-shield-halved text-xs"></i> מאובטח ומוגן מקומית + Google Cloud
+                            </span>
+                        </div>
+                    </footer>
+
+                    {/* Toast Notification */}
+                    <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
+
+                    {/* Confirmation Dialog */}
+                    <ConfirmModal 
+                        isOpen={confirmState.isOpen}
+                        title={confirmState.title}
+                        message={confirmState.message}
+                        onConfirm={confirmState.onConfirm}
+                        onCancel={() => setConfirmState({ isOpen: false, title: '', message: '', onConfirm: null })}
+                    />
+                </div>
+            );
+        }
+
+        // TAB 1: DAILY DASHBOARD COMPONENT
+        function DailyDashboard({ 
+            students, 
+            totalStudentsCount, 
+            selectedDate, 
+            setSelectedDate, 
+            getLogEntry, 
+            updateLogEntry, 
+            customColumns, 
+            handleMarkAllPrayerPresent, 
+            searchQuery, 
+            setSearchQuery,
+            exportDailySummary 
+        }) {
+            // Change Date helper buttons
+            const setToday = () => setSelectedDate(getTodayString());
+            const setYesterday = () => {
+                const d = new Date(selectedDate || getTodayString());
+                d.setDate(d.getDate() - 1);
+                setSelectedDate(d.toISOString().split('T')[0]);
+            };
+            const setTomorrow = () => {
+                const d = new Date(selectedDate || getTodayString());
+                d.setDate(d.getDate() + 1);
+                setSelectedDate(d.toISOString().split('T')[0]);
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Control Bar: Date Selector & Quick Actions */}
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                        {/* Date Picker */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                                <i className="fa-solid fa-calendar text-brand-600"></i>
+                                תאריך רישום:
+                            </label>
+                            <input 
+                                type="date" 
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-slate-700 font-semibold text-sm outline-none bg-slate-50 shadow-inner"
+                            />
+                            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                                <button onClick={setYesterday} className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-white rounded-lg transition">אתמול</button>
+                                <button onClick={setToday} className="px-2.5 py-1 text-xs font-medium text-brand-700 bg-white shadow-xs rounded-lg transition">היום</button>
+                                <button onClick={setTomorrow} className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-white rounded-lg transition">מחר</button>
+                            </div>
+                        </div>
+
+                        {/* Search & Bulk Action */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            {/* Search */}
+                            <div className="relative flex-1 sm:w-64">
+                                <i className="fa-solid fa-magnifying-glass absolute right-3 top-3 text-slate-400 text-sm"></i>
+                                <input 
+                                    type="text"
+                                    placeholder="חיפוש תלמיד..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                />
+                            </div>
+
+                            {/* Quick Attendance Mark */}
+                            <button 
+                                onClick={handleMarkAllPrayerPresent}
+                                className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-medium text-xs rounded-xl flex items-center gap-1.5 transition"
+                                title="סמן את כל התלמידים כנוכחים בתפילה בתאריך זה"
+                            >
+                                <i className="fa-solid fa-check-double text-emerald-600"></i>
+                                <span>סמן הכל נוכח</span>
+                            </button>
+
+                            {/* Export CSV */}
+                            <button 
+                                onClick={exportDailySummary}
+                                className="px-3.5 py-2 bg-slate-800 text-white hover:bg-slate-700 font-medium text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition"
+                            >
+                                <i className="fa-solid fa-file-excel"></i>
+                                <span>ייצא דוח יומי</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Table Summary Header */}
+                    <div className="flex items-center justify-between text-xs font-medium text-slate-500 px-1">
+                        <span>מציג {students.length} תלמידים מתוך {totalStudentsCount}</span>
+                        <span className="flex items-center gap-1 text-brand-600 font-semibold">
+                            <i className="fa-solid fa-circle text-[8px]"></i> סנכרון אוטומטי פעיל
+                        </span>
+                    </div>
+
+                    {/* Main Interactive Table */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right text-sm border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
+                                        <th className="p-4 min-w-[160px]">שם התלמיד</th>
+                                        <th className="p-4 min-w-[200px]">
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="fa-solid fa-hands-praying text-brand-600"></i>
+                                                <span>נוכחות בתפילה</span>
+                                            </div>
+                                        </th>
+                                        <th className="p-4 min-w-[220px]">
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="fa-solid fa-building-user text-amber-600"></i>
+                                                <span>בקשת שחרור מהפנימייה</span>
+                                            </div>
+                                        </th>
+                                        <th className="p-4 min-w-[200px]">
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="fa-solid fa-comments text-indigo-600"></i>
+                                                <span>שיחה אישית</span>
+                                            </div>
+                                        </th>
+                                        <th className="p-4 min-w-[220px]">
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="fa-solid fa-phone text-emerald-600"></i>
+                                                <span>שיחה עם הורים</span>
+                                            </div>
+                                        </th>
+                                        {customColumns.map(col => (
+                                            <th key={col.id} className="p-4 min-w-[160px] text-slate-600">
+                                                {col.name}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {students.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5 + customColumns.length} className="p-8 text-center text-slate-400">
+                                                לא נמצאו תלמידים תואמים.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        students.map(student => {
+                                            const log = getLogEntry(selectedDate, student.id);
+                                            return (
+                                                <tr key={student.id} className="hover:bg-slate-50/80 transition-colors">
+                                                    {/* Student Info */}
+                                                    <td className="p-4">
+                                                        <div className="font-bold text-slate-800">{student.name}</div>
+                                                        {student.group && (
+                                                            <span className="text-[11px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-normal inline-block mt-0.5">
+                                                                {student.group}
+                                                            </span>
+                                                        )}
+                                                        {student.notes && (
+                                                            <div className="text-[11px] text-amber-600 font-medium mt-0.5">
+                                                                {student.notes}
+                                                            </div>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Prayer Attendance */}
+                                                    <td className="p-4">
+                                                        <div className="space-y-2">
+                                                            <select
+                                                                value={log.prayerStatus}
+                                                                onChange={(e) => updateLogEntry(student.id, 'prayerStatus', e.target.value)}
+                                                                className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-semibold outline-none transition ${
+                                                                    log.prayerStatus === 'present' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
+                                                                    log.prayerStatus === 'absent' ? 'bg-rose-50 border-rose-300 text-rose-800' :
+                                                                    log.prayerStatus === 'late_justified' ? 'bg-amber-50 border-amber-300 text-amber-800' :
+                                                                    'bg-orange-50 border-orange-300 text-orange-800'
+                                                                }`}
+                                                            >
+                                                                <option value="present">✓ נוכח</option>
+                                                                <option value="absent">✗ נעדר</option>
+                                                                <option value="late_justified">⌛ איחור מוצדק</option>
+                                                                <option value="late_unjustified">⚠ איחור לא מוצדק</option>
+                                                            </select>
+                                                            <input 
+                                                                type="text"
+                                                                placeholder="הערה לתפילה..."
+                                                                value={log.prayerNote || ''}
+                                                                onChange={(e) => updateLogEntry(student.id, 'prayerNote', e.target.value)}
+                                                                className="w-full text-xs px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-1 focus:ring-brand-500 outline-none"
+                                                            />
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Boarding Release Request */}
+                                                    <td className="p-4">
+                                                        <div className="space-y-1.5">
+                                                            <select
+                                                                value={log.releaseStatus}
+                                                                onChange={(e) => updateLogEntry(student.id, 'releaseStatus', e.target.value)}
+                                                                className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs font-medium bg-white text-slate-700 outline-none"
+                                                            >
+                                                                <option value="none">ללא שחרור</option>
+                                                                <option value="approved">🟢 אושר שחרור</option>
+                                                                <option value="pending">🟡 ממתין לאישור</option>
+                                                                <option value="rejected">🔴 נדחה</option>
+                                                            </select>
+                                                            
+                                                            {log.releaseStatus !== 'none' && (
+                                                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+                                                                    <div className="flex gap-1">
+                                                                        <input 
+                                                                            type="time" 
+                                                                            title="שעת יציאה"
+                                                                            value={log.releaseExitTime || ''}
+                                                                            onChange={(e) => updateLogEntry(student.id, 'releaseExitTime', e.target.value)}
+                                                                            className="w-1/2 p-1 border rounded bg-white text-center text-xs"
+                                                                        />
+                                                                        <input 
+                                                                            type="time" 
+                                                                            title="שעת חזרה"
+                                                                            value={log.releaseReturnTime || ''}
+                                                                            onChange={(e) => updateLogEntry(student.id, 'releaseReturnTime', e.target.value)}
+                                                                            className="w-1/2 p-1 border rounded bg-white text-center text-xs"
+                                                                        />
+                                                                    </div>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        placeholder="סיבת שחרור..."
+                                                                        value={log.releaseReason || ''}
+                                                                        onChange={(e) => updateLogEntry(student.id, 'releaseReason', e.target.value)}
+                                                                        className="w-full p-1 border rounded bg-white text-xs outline-none"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Personal Conversation */}
+                                                    <td className="p-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                                <input 
+                                                                    type="checkbox"
+                                                                    checked={!!log.personalTalk}
+                                                                    onChange={(e) => updateLogEntry(student.id, 'personalTalk', e.target.checked)}
+                                                                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                                                                />
+                                                                <span className={`text-xs font-semibold ${log.personalTalk ? 'text-indigo-700' : 'text-slate-500'}`}>
+                                                                    {log.personalTalk ? 'התקיימה שיחה' : 'ללא שיחה'}
+                                                                </span>
+                                                            </label>
+
+                                                            {log.personalTalk && (
+                                                                <textarea
+                                                                    rows="2"
+                                                                    placeholder="סיכום קצר של השיחה..."
+                                                                    value={log.personalTalkSummary || ''}
+                                                                    onChange={(e) => updateLogEntry(student.id, 'personalTalkSummary', e.target.value)}
+                                                                    className="w-full text-xs p-2 bg-indigo-50/50 border border-indigo-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
+                                                                ></textarea>
+                                                            )}
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Parent Conversation */}
+                                                    <td className="p-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                                <input 
+                                                                    type="checkbox"
+                                                                    checked={!!log.parentTalk}
+                                                                    onChange={(e) => updateLogEntry(student.id, 'parentTalk', e.target.checked)}
+                                                                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                                                                />
+                                                                <span className={`text-xs font-semibold ${log.parentTalk ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                                                    {log.parentTalk ? 'שיחת הורים' : 'ללא שיחה'}
+                                                                </span>
+                                                            </label>
+
+                                                            {log.parentTalk && (
+                                                                <div className="space-y-1">
+                                                                    <select
+                                                                        value={log.parentTalkContact || 'אמא'}
+                                                                        onChange={(e) => updateLogEntry(student.id, 'parentTalkContact', e.target.value)}
+                                                                        className="w-full text-xs px-2 py-1 bg-white border border-emerald-200 rounded-lg outline-none font-medium text-slate-700"
+                                                                    >
+                                                                        <option value="אמא">אמא</option>
+                                                                        <option value="אבא">אבא</option>
+                                                                        <option value="אפוטרופוס">אפוטרופוס</option>
+                                                                        <option value="אחר">אחר</option>
+                                                                    </select>
+                                                                    <textarea
+                                                                        rows="2"
+                                                                        placeholder="סיכום שיחה עם ההורים..."
+                                                                        value={log.parentTalkSummary || ''}
+                                                                        onChange={(e) => updateLogEntry(student.id, 'parentTalkSummary', e.target.value)}
+                                                                        className="w-full text-xs p-2 bg-emerald-50/40 border border-emerald-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none resize-none"
+                                                                    ></textarea>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Custom Columns */}
+                                                    {customColumns.map(col => (
+                                                        <td key={col.id} className="p-4">
+                                                            <input 
+                                                                type="text"
+                                                                placeholder={`תוכן עבור ${col.name}...`}
+                                                                value={(log.customValues && log.customValues[col.id]) || ''}
+                                                                onChange={(e) => updateLogEntry(student.id, `custom_${col.id}`, e.target.value)}
+                                                                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-brand-500 outline-none"
+                                                            />
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // TAB 2: STUDENT CARD & RANGE REPORTS COMPONENT
+        function StudentReportView({ 
+            students, 
+            dailyLogs, 
+            customColumns, 
+            reportStudentId, 
+            setReportStudentId, 
+            reportStartDate, 
+            setReportStartDate, 
+            reportEndDate, 
+            setReportEndDate, 
+            exportToCSV 
+        }) {
+            // Default to first student if not selected
+            useEffect(() => {
+                if (!reportStudentId && students.length > 0) {
+                    setReportStudentId(students[0].id);
+                }
+            }, [students, reportStudentId]);
+
+            const selectedStudent = students.find(s => s.id === reportStudentId);
+
+            // Calculate student history within date range
+            const studentReportData = useMemo(() => {
+                if (!reportStudentId || !reportStartDate || !reportEndDate) return { entries: [], stats: {} };
+
+                const entries = [];
+                let prayerPresentCount = 0;
+                let prayerLateCount = 0;
+                let prayerAbsentCount = 0;
+                let totalLoggedDays = 0;
+                let personalTalksCount = 0;
+                let parentTalksCount = 0;
+                let releaseCount = 0;
+
+                // Loop through dates chronologically
+                const start = new Date(reportStartDate);
+                const end = new Date(reportEndDate);
+
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    const dateStr = d.toISOString().split('T')[0];
+                    if (dailyLogs[dateStr] && dailyLogs[dateStr][reportStudentId]) {
+                        const log = dailyLogs[dateStr][reportStudentId];
+                        
+                        totalLoggedDays++;
+                        if (log.prayerStatus === 'present') prayerPresentCount++;
+                        if (log.prayerStatus === 'late_justified' || log.prayerStatus === 'late_unjustified') prayerLateCount++;
+                        if (log.prayerStatus === 'absent') prayerAbsentCount++;
+
+                        if (log.personalTalk) personalTalksCount++;
+                        if (log.parentTalk) parentTalksCount++;
+                        if (log.releaseStatus === 'approved') releaseCount++;
+
+                        entries.push({
+                            date: dateStr,
+                            ...log
+                        });
+                    }
+                }
+
+                // Reverse to show newest first
+                entries.sort((a, b) => b.date.localeCompare(a.date));
+
+                const prayerPercentage = totalLoggedDays > 0 
+                    ? Math.round(((prayerPresentCount + (prayerLateCount * 0.5)) / totalLoggedDays) * 100) 
+                    : 0;
+
+                return {
+                    entries,
+                    stats: {
+                        totalLoggedDays,
+                        prayerPresentCount,
+                        prayerLateCount,
+                        prayerAbsentCount,
+                        prayerPercentage,
+                        personalTalksCount,
+                        parentTalksCount,
+                        releaseCount
+                    }
+                };
+            }, [dailyLogs, reportStudentId, reportStartDate, reportEndDate]);
+
+            const exportIndividualReport = () => {
+                if (!selectedStudent) return;
+                const headers = ['תאריך', 'נוכחות בתפילה', 'הערת תפילה', 'סטטוס שחרור', 'שעת יציאה', 'שעת חזרה', 'סיבת שחרור', 'שיחה אישית', 'סיכום שיחה אישית', 'שיחה עם הורים', 'גורם מעורב', 'סיכום שיחת הורים'];
+                customColumns.forEach(c => headers.push(c.name));
+
+                const rows = studentReportData.entries.map(log => {
+                    const prayerText = {
+                        present: 'נוכח',
+                        absent: 'נעדר',
+                        late_justified: 'איחור מוצדק',
+                        late_unjustified: 'איחור לא מוצדק'
+                    }[log.prayerStatus] || '';
+
+                    const releaseText = {
+                        none: 'ללא',
+                        approved: 'אושר',
+                        rejected: 'נדחה',
+                        pending: 'ממתין'
+                    }[log.releaseStatus] || '';
+
+                    const row = [
+                        log.date,
+                        prayerText,
+                        log.prayerNote || '',
+                        releaseText,
+                        log.releaseExitTime || '',
+                        log.releaseReturnTime || '',
+                        log.releaseReason || '',
+                        log.personalTalk ? 'כן' : 'לא',
+                        log.personalTalkSummary || '',
+                        log.parentTalk ? 'כן' : 'לא',
+                        log.parentTalkContact || '',
+                        log.parentTalkSummary || ''
+                    ];
+
+                    customColumns.forEach(c => {
+                        row.push((log.customValues && log.customValues[c.id]) || '');
+                    });
+
+                    return row;
+                });
+
+                exportToCSV(`דוח_כרטיס_תלמיד_${selectedStudent.name}_${reportStartDate}_עד_${reportEndDate}.csv`, headers, rows);
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Filter controls card */}
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                        {/* Student selection & range */}
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">בחר תלמיד:</label>
+                                <select
+                                    value={reportStudentId}
+                                    onChange={(e) => setReportStudentId(e.target.value)}
+                                    className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-800 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                >
+                                    {students.map(st => (
+                                        <option key={st.id} value={st.id}>{st.name} ({st.group || 'ללא כיתה'})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">מתאריך:</label>
+                                    <input 
+                                        type="date"
+                                        value={reportStartDate}
+                                        onChange={(e) => setReportStartDate(e.target.value)}
+                                        className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 outline-none"
+                                    />
+                                </div>
+                                <span className="mt-4 text-slate-400 font-bold">-</span>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">עד תאריך:</label>
+                                    <input 
+                                        type="date"
+                                        value={reportEndDate}
+                                        onChange={(e) => setReportEndDate(e.target.value)}
+                                        className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Export button */}
+                        {selectedStudent && (
+                            <button
+                                onClick={exportIndividualReport}
+                                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition"
+                            >
+                                <i className="fa-solid fa-file-export"></i>
+                                <span>ייצא כרטיס תלמיד ל-CSV</span>
+                            </button>
+                        )}
+                    </div>
+
+                    {selectedStudent ? (
+                        <>
+                            {/* Stats Summary Dashboard */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                                        <i className="fa-solid fa-hands-praying"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-black text-slate-800">{studentReportData.stats.prayerPercentage}%</div>
+                                        <div className="text-xs font-medium text-slate-500">נוכחות בתפילה</div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl font-bold">
+                                        <i className="fa-solid fa-comments"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-black text-slate-800">{studentReportData.stats.personalTalksCount}</div>
+                                        <div className="text-xs font-medium text-slate-500">שיחות אישיות</div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl font-bold">
+                                        <i className="fa-solid fa-phone"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-black text-slate-800">{studentReportData.stats.parentTalksCount}</div>
+                                        <div className="text-xs font-medium text-slate-500">שיחות הורים</div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold">
+                                        <i className="fa-solid fa-person-walking-luggage"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-black text-slate-800">{studentReportData.stats.releaseCount}</div>
+                                        <div className="text-xs font-medium text-slate-500">שחרורים מזהיר/פנימייה</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Chronological Log Table */}
+                            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <i className="fa-solid fa-timeline text-brand-600"></i>
+                                        פירוט כרונולוגי עבור {selectedStudent.name} ({studentReportData.entries.length} תתי דיווחים)
+                                    </h3>
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-right text-xs">
+                                        <thead>
+                                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                                <th className="p-3">תאריך</th>
+                                                <th className="p-3">תפילה</th>
+                                                <th className="p-3">שחרור פנימייה</th>
+                                                <th className="p-3">שיחה אישית</th>
+                                                <th className="p-3">שיחה עם הורים</th>
+                                                {customColumns.map(col => (
+                                                    <th key={col.id} className="p-3">{col.name}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {studentReportData.entries.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5 + customColumns.length} className="p-8 text-center text-slate-400">
+                                                        אין עדיין תיעודים עבור תלמיד זה בטווח התאריכים שנבחר.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                studentReportData.entries.map((log) => {
+                                                    const prayerBadge = {
+                                                        present: <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">נוכח</span>,
+                                                        absent: <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded font-bold">נעדר</span>,
+                                                        late_justified: <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">איחור מוצדק</span>,
+                                                        late_unjustified: <span className="bg-orange-100 text-orange-800 px-2 py-0.5 rounded font-bold">איחור לא מוצדק</span>
+                                                    }[log.prayerStatus];
+
+                                                    return (
+                                                        <tr key={log.date} className="hover:bg-slate-50">
+                                                            <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{log.date}</td>
+                                                            <td className="p-3">
+                                                                {prayerBadge}
+                                                                {log.prayerNote && <div className="text-[11px] text-slate-500 mt-1">{log.prayerNote}</div>}
+                                                            </td>
+                                                            <td className="p-3">
+                                                                {log.releaseStatus !== 'none' ? (
+                                                                    <div>
+                                                                        <span className="font-semibold text-amber-700">
+                                                                            {log.releaseStatus === 'approved' ? 'אושר' : log.releaseStatus === 'rejected' ? 'נדחה' : 'ממתין'}
+                                                                        </span>
+                                                                        {(log.releaseExitTime || log.releaseReturnTime) && (
+                                                                            <div className="text-[11px] text-slate-500">
+                                                                                {log.releaseExitTime} - {log.releaseReturnTime}
+                                                                            </div>
+                                                                        )}
+                                                                        {log.releaseReason && <div className="text-[11px] text-slate-500">{log.releaseReason}</div>}
+                                                                    </div>
+                                                                ) : <span className="text-slate-400">-</span>}
+                                                            </td>
+                                                            <td className="p-3">
+                                                                {log.personalTalk ? (
+                                                                    <div className="bg-indigo-50/70 p-2 rounded-lg text-indigo-900 border border-indigo-100">
+                                                                        <div className="font-bold text-[11px]">בוצעה שיחה</div>
+                                                                        {log.personalTalkSummary && <div className="mt-0.5 text-[11px]">{log.personalTalkSummary}</div>}
+                                                                    </div>
+                                                                ) : <span className="text-slate-400">-</span>}
+                                                            </td>
+                                                            <td className="p-3">
+                                                                {log.parentTalk ? (
+                                                                    <div className="bg-emerald-50/70 p-2 rounded-lg text-emerald-900 border border-emerald-100">
+                                                                        <div className="font-bold text-[11px]">עם {log.parentTalkContact}</div>
+                                                                        {log.parentTalkSummary && <div className="mt-0.5 text-[11px]">{log.parentTalkSummary}</div>}
+                                                                    </div>
+                                                                ) : <span className="text-slate-400">-</span>}
+                                                            </td>
+                                                            {customColumns.map(col => (
+                                                                <td key={col.id} className="p-3 text-slate-600">
+                                                                    {(log.customValues && log.customValues[col.id]) || '-'}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="bg-white p-12 text-center text-slate-400 rounded-2xl border border-slate-200">
+                            בחר תלמיד כדי לצפות בכרטיס הנתונים שלו.
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // TAB 3: CLASS MANAGEMENT & EXCEL IMPORT COMPONENT
+        function ClassManagementView({ 
+            students, 
+            setStudents, 
+            customColumns, 
+            setCustomColumns, 
+            showToast, 
+            triggerConfirm,
+            setDailyLogs 
+        }) {
+            const [newStudentName, setNewStudentName] = useState('');
+            const [newStudentGroup, setNewStudentGroup] = useState('');
+            const [newStudentNotes, setNewStudentNotes] = useState('');
+            const [importRawText, setImportRawText] = useState('');
+            const [newColName, setNewColName] = useState('');
+
+            const [editingStudentId, setEditingStudentId] = useState(null);
+            const [editName, setEditName] = useState('');
+            const [editGroup, setEditGroup] = useState('');
+            const [editNotes, setEditNotes] = useState('');
+
+            const handleAddStudent = (e) => {
+                e.preventDefault();
+                if (!newStudentName.trim()) {
+                    showToast('נא להזין שם תלמיד', 'warning');
+                    return;
+                }
+
+                const newStudent = {
+                    id: Date.now().toString(),
+                    name: newStudentName.trim(),
+                    group: newStudentGroup.trim(),
+                    notes: newStudentNotes.trim()
+                };
+
+                setStudents(prev => [...prev, newStudent]);
+                setNewStudentName('');
+                setNewStudentGroup('');
+                setNewStudentNotes('');
+                showToast(`התלמיד/ה ${newStudent.name} נוספ/ה בהצלחה`);
+            };
+
+            const startEditing = (student) => {
+                setEditingStudentId(student.id);
+                setEditName(student.name);
+                setEditGroup(student.group || '');
+                setEditNotes(student.notes || '');
+            };
+
+            const saveEditing = (id) => {
+                if (!editName.trim()) return;
+                setStudents(prev => prev.map(s => s.id === id ? { ...s, name: editName.trim(), group: editGroup.trim(), notes: editNotes.trim() } : s));
+                setEditingStudentId(null);
+                showToast('פרטי התלמיד עודכנו');
+            };
+
+            const handleDeleteStudent = (id, name) => {
+                triggerConfirm(
+                    'מחיקת תלמיד',
+                    `האם אתה בטוח שברצונך למחוק את התלמיד "${name}" מתוך הרשימה?`,
+                    () => {
+                        setStudents(prev => prev.filter(s => s.id !== id));
+                        showToast(`התלמיד ${name} הוסר מהכיתה`);
+                    }
+                );
+            };
+
+            const handleBatchImport = () => {
+                if (!importRawText.trim()) {
+                    showToast('אנא הדבק תוכן או רשימה', 'warning');
+                    return;
+                }
+
+                const lines = importRawText.split('\n').map(l => l.trim()).filter(Boolean);
+                const newAdded = [];
+
+                lines.forEach((line, idx) => {
+                    const parts = line.split(/[\t,;]+/).map(p => p.trim());
+                    if (parts.length >= 1 && parts[0]) {
+                        if (idx === 0 && (parts[0].includes('שם') || parts[0].toLowerCase().includes('name'))) {
+                            return;
+                        }
+                        newAdded.push({
+                            id: (Date.now() + idx).toString(),
+                            name: parts[0],
+                            group: parts[1] || 'א5',
+                            notes: parts[2] || ''
+                        });
+                    }
+                });
+
+                if (newAdded.length > 0) {
+                    setStudents(prev => [...prev, ...newAdded]);
+                    setImportRawText('');
+                    showToast(`נקלטו בהצלחה ${newAdded.length} תלמידים חדשים!`);
+                } else {
+                    showToast('לא זוהו שמות תלמידים בטקסט', 'warning');
+                }
+            };
+
+            const handleAddCustomColumn = (e) => {
+                e.preventDefault();
+                if (!newColName.trim()) return;
+
+                const col = {
+                    id: 'col_' + Date.now(),
+                    name: newColName.trim(),
+                    type: 'text'
+                };
+
+                setCustomColumns(prev => [...prev, col]);
+                setNewColName('');
+                showToast(`נוספה עמודה חדשה: "${col.name}"`);
+            };
+
+            const handleDeleteCustomColumn = (colId, colName) => {
+                triggerConfirm(
+                    'מחיקת עמודה מותאמת אישית',
+                    `האם למחוק את העמודה "${colName}"?`,
+                    () => {
+                        setCustomColumns(prev => prev.filter(c => c.id !== colId));
+                        showToast(`העמודה "${colName}" הוסרה`);
+                    }
+                );
+            };
+
+            const handleResetData = () => {
+                triggerConfirm(
+                    'איפוס נתוני המערכת',
+                    'אזהרה: פעולה זו תאפס את רשימת התלמידים, התיעודים והעמודות לברירת המחדל הראשונית. האם להמשיך?',
+                    () => {
+                        setStudents(INITIAL_STUDENTS);
+                        setCustomColumns(INITIAL_CUSTOM_COLUMNS);
+                        setDailyLogs({});
+                        showToast('נתוני המערכת אופסו בהצלחה');
+                    }
+                );
+            };
+
+            return (
+                <div className="space-y-8">
+                    {/* Top Grid: Import Excel & New Student */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Box 1: Excel / CSV Import */}
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                    <i className="fa-solid fa-file-import text-brand-600"></i>
+                                    ייבוא רשימת תלמידים מאקסל / טקסט
+                                </h3>
+                                <span className="text-xs bg-brand-50 text-brand-700 font-semibold px-2.5 py-1 rounded-full">מהיר וקל</span>
+                            </div>
+
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                                העתק והדבק תאי טבלה מ-Excel או רשימת שמות (כל שורה תלמיד חדש). ניתן להפריד קבוצה/הערה באמצעות פסיק או Tab.
+                            </p>
+
+                            <textarea
+                                rows="4"
+                                placeholder={`לדוגמה:\nישראל ישראלי, כיתה א1, רגישות לגלוטן\nמשה כהן, כיתה א1\nדוד לוי`}
+                                value={importRawText}
+                                onChange={(e) => setImportRawText(e.target.value)}
+                                className="w-full text-xs p-3 bg-slate-50 border border-slate-300 rounded-xl font-mono focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                            ></textarea>
+
+                            <button
+                                onClick={handleBatchImport}
+                                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2"
+                            >
+                                <i className="fa-solid fa-cloud-arrow-up"></i>
+                                <span>קלוט רשימה מאקסל/טקסט</span>
+                            </button>
+                        </div>
+
+                        {/* Box 2: Add Single Student Form */}
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                            <div className="border-b border-slate-100 pb-3">
+                                <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                    <i className="fa-solid fa-user-plus text-emerald-600"></i>
+                                    הוספת תלמיד יחיד
+                                </h3>
+                            </div>
+
+                            <form onSubmit={handleAddStudent} className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">שם מלא *</label>
+                                    <input 
+                                        type="text"
+                                        placeholder="שם התלמיד..."
+                                        value={newStudentName}
+                                        onChange={(e) => setNewStudentName(e.target.value)}
+                                        className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">קבוצה / כיתה</label>
+                                        <input 
+                                            type="text"
+                                            placeholder="לדוגמה: א5..."
+                                            value={newStudentGroup}
+                                            onChange={(e) => setNewStudentGroup(e.target.value)}
+                                            className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">הערה מיוחדת</label>
+                                        <input 
+                                            type="text"
+                                            placeholder="רגישויות / הערות..."
+                                            value={newStudentNotes}
+                                            onChange={(e) => setNewStudentNotes(e.target.value)}
+                                            className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2"
+                                >
+                                    <i className="fa-solid fa-plus"></i>
+                                    <span>הוסף תלמיד לכיתה</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    {/* Middle: Custom Columns Management */}
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                            <div>
+                                <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                    <i className="fa-solid fa-columns text-indigo-600"></i>
+                                    עמודות מותאמות אישית למעקב
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">תוכל להוסיף שדות מעקב נוספים שיופיעו בטבלת הרישום היומית (למשל: "הערות משמעת", "קבוצת לימוד", וכו').</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                            <form onSubmit={handleAddCustomColumn} className="flex items-center gap-2 flex-1 max-w-md">
+                                <input 
+                                    type="text"
+                                    placeholder="שם עמודה חדשה..."
+                                    value={newColName}
+                                    onChange={(e) => setNewColName(e.target.value)}
+                                    className="flex-1 text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                                >
+                                    הוסף עמודה
+                                </button>
+                            </form>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 pt-2">
+                            {customColumns.map(col => (
+                                <div key={col.id} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-900 px-3 py-1.5 rounded-xl text-xs font-semibold">
+                                    <span>{col.name}</span>
+                                    <button 
+                                        onClick={() => handleDeleteCustomColumn(col.id, col.name)}
+                                        className="text-indigo-400 hover:text-rose-600 transition"
+                                        title="מחק עמודה זו"
+                                    >
+                                        <i className="fa-solid fa-circle-xmark"></i>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Bottom: Roster Table & Management */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                <i className="fa-solid fa-list-check text-slate-600"></i>
+                                רשימת תלמידי הכיתה ({students.length} תלמידים רשומים)
+                            </h3>
+                            
+                            <button
+                                onClick={handleResetData}
+                                className="text-xs text-rose-600 hover:text-rose-800 font-medium transition flex items-center gap-1"
+                            >
+                                <i className="fa-solid fa-rotate-left"></i>
+                                <span>אפס לברירת מחדל</span>
+                            </button>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right text-xs">
+                                <thead>
+                                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                        <th className="p-3">#</th>
+                                        <th className="p-3">שם התלמיד</th>
+                                        <th className="p-3">קבוצה/כיתה</th>
+                                        <th className="p-3">הערות רפואיות/כלליות</th>
+                                        <th className="p-3 text-center">פעולות</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {students.map((st, index) => (
+                                        <tr key={st.id} className="hover:bg-slate-50">
+                                            <td className="p-3 font-mono text-slate-400">{index + 1}</td>
+                                            <td className="p-3 font-bold text-slate-800">
+                                                {editingStudentId === st.id ? (
+                                                    <input 
+                                                        type="text" 
+                                                        value={editName}
+                                                        onChange={(e) => setEditName(e.target.value)}
+                                                        className="p-1 border rounded bg-white text-xs"
+                                                    />
+                                                ) : st.name}
+                                            </td>
+                                            <td className="p-3 text-slate-600">
+                                                {editingStudentId === st.id ? (
+                                                    <input 
+                                                        type="text" 
+                                                        value={editGroup}
+                                                        onChange={(e) => setEditGroup(e.target.value)}
+                                                        className="p-1 border rounded bg-white text-xs"
+                                                    />
+                                                ) : (st.group || '-')}
+                                            </td>
+                                            <td className="p-3 text-slate-600">
+                                                {editingStudentId === st.id ? (
+                                                    <input 
+                                                        type="text" 
+                                                        value={editNotes}
+                                                        onChange={(e) => setEditNotes(e.target.value)}
+                                                        className="p-1 border rounded bg-white text-xs"
+                                                    />
+                                                ) : (st.notes || '-')}
+                                            </td>
+                                            <td className="p-3 text-center">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    {editingStudentId === st.id ? (
+                                                        <button 
+                                                            onClick={() => saveEditing(st.id)}
+                                                            className="text-emerald-600 hover:text-emerald-800 font-bold"
+                                                        >
+                                                            שמור
+                                                        </button>
+                                                    ) : (
+                                                        <button 
+                                                            onClick={() => startEditing(st)}
+                                                            className="text-slate-400 hover:text-brand-600"
+                                                            title="ערוך"
+                                                        >
+                                                            <i className="fa-solid fa-pen"></i>
+                                                        </button>
+                                                    )}
+                                                    <button 
+                                                        onClick={() => handleDeleteStudent(st.id, st.name)}
+                                                        className="text-slate-400 hover:text-rose-600"
+                                                        title="מחק תלמיד"
+                                                    >
+                                                        <i className="fa-solid fa-trash-can"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // TAB 4: GOOGLE SHEETS SYNC COMPONENT (NEW!)
+        function GoogleSyncView({ 
+            googleScriptUrl, 
+            setGoogleScriptUrl, 
+            autoSync, 
+            setAutoSync, 
+            syncPushToGoogle, 
+            syncPullFromGoogle, 
+            syncStatus, 
+            lastSyncTime, 
+            showToast 
+        }) {
+            const [inputUrl, setInputUrl] = useState(googleScriptUrl);
+            const [copied, setCopied] = useState(false);
+
+            const handleSaveUrl = (e) => {
+                e.preventDefault();
+                setGoogleScriptUrl(inputUrl.trim());
+                showToast('כתובת Google Apps Script עודכנה בהצלחה');
+            };
+
+            const copyScriptCode = () => {
+                navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+                setCopied(true);
+                showToast('הקוד הועתק ללוח!');
+                setTimeout(() => setCopied(false), 3000);
+            };
+
+            return (
+                <div className="space-y-8 max-w-5xl mx-auto">
+                    {/* Top Hero Banner */}
+                    <div className="bg-gradient-to-r from-emerald-700 to-teal-800 text-white p-6 sm:p-8 rounded-3xl shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="space-y-2">
+                            <div className="inline-flex items-center gap-2 bg-emerald-600/50 text-emerald-200 px-3 py-1 rounded-full text-xs font-semibold">
+                                <i className="fa-solid fa-cloud-check"></i> סנכרון ענן בזמן אמת
+                            </div>
+                            <h2 className="text-2xl font-black">חיבור מלא ל-Google Sheets</h2>
+                            <p className="text-emerald-100 text-sm max-w-xl leading-relaxed">
+                                חבר את האפליקציה לגיליון Google Sheet אישי שלך. הנתונים שלך יישמרו בענן של גוגל ויהיו נגישים מכל מכשיר (מחשב, טלפון, טאבלט) בזמן אמת.
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col gap-3 min-w-[200px]">
+                            <button
+                                onClick={() => syncPushToGoogle()}
+                                disabled={!googleScriptUrl || syncStatus === 'syncing'}
+                                className="px-5 py-3 bg-white text-emerald-900 hover:bg-emerald-50 disabled:opacity-50 rounded-2xl font-bold text-sm shadow-md transition flex items-center justify-center gap-2"
+                            >
+                                <i className="fa-solid fa-cloud-arrow-up text-emerald-600"></i>
+                                <span>שלח נתונים ל-Google</span>
+                            </button>
+                            <button
+                                onClick={() => syncPullFromGoogle()}
+                                disabled={!googleScriptUrl || syncStatus === 'syncing'}
+                                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 rounded-2xl font-bold text-sm shadow-sm transition flex items-center justify-center gap-2"
+                            >
+                                <i className="fa-solid fa-cloud-arrow-down"></i>
+                                <span>טען נתונים מ-Google</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Connection Form */}
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                        <h3 className="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <i className="fa-solid fa-link text-emerald-600"></i>
+                            הגדרת כתובת ה-Web App של Google
+                        </h3>
+
+                        <form onSubmit={handleSaveUrl} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                    כתובת Web App URL (מתוך Google Apps Script):
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="url"
+                                        placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                                        value={inputUrl}
+                                        onChange={(e) => setInputUrl(e.target.value)}
+                                        className="flex-1 text-xs p-3 bg-slate-50 border border-slate-300 rounded-xl font-mono focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    />
+                                    <button
+                                        type="submit"
+                                        className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition whitespace-nowrap"
+                                    >
+                                        שמור כתובת
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 pt-2">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input 
+                                        type="checkbox"
+                                        checked={autoSync}
+                                        onChange={(e) => setAutoSync(e.target.checked)}
+                                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="text-xs font-bold text-slate-700">סנכרון אוטומטי (Auto-Sync) ברקע בכל שינוי נתונים</span>
+                                </label>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Step-by-Step Tutorial Card */}
+                    <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+                        <div className="border-b border-slate-100 pb-4">
+                            <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                                <i className="fa-solid fa-list-check text-brand-600"></i>
+                                מדריך פשוט: איך מחברים את Google Sheets (חד-פעמי)?
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-1">עקוב אחר 4 השלבים הבאים כדי לקבל כתובת סנכרון אישית בחינם:</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-700">
+                            {/* Step 1 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                                <div className="flex items-center gap-2 font-bold text-slate-900">
+                                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs">1</span>
+                                    <span>פתח Google Sheet חדש</span>
+                                </div>
+                                <p className="text-slate-600 leading-relaxed">
+                                    היכנס לחשבון הגוגל שלך, פתח גיליון Google Sheets חדש (או דרך drive.google.com). לחץ בתפריט העליון על: <br/>
+                                    <strong className="text-slate-800">הרחבות (Extensions) &gt; Apps Script</strong>.
+                                </p>
+                            </div>
+
+                            {/* Step 2 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                                <div className="flex items-center gap-2 font-bold text-slate-900">
+                                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs">2</span>
+                                    <span>הדבק את הקוד המוכן</span>
+                                </div>
+                                <p className="text-slate-600 leading-relaxed">
+                                    מחק את כל הטקסט הקיים בעורך הקוד, והדבק את הקוד הבא:
+                                </p>
+                                <button
+                                    onClick={copyScriptCode}
+                                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2"
+                                >
+                                    <i className={`fa-solid ${copied ? 'fa-check text-emerald-400' : 'fa-copy'}`}></i>
+                                    <span>{copied ? 'הקוד הועתק!' : 'העתק קוד Apps Script'}</span>
+                                </button>
+                            </div>
+
+                            {/* Step 3 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                                <div className="flex items-center gap-2 font-bold text-slate-900">
+                                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs">3</span>
+                                    <span>בצע פריסה (Deploy) כ-Web App</span>
+                                </div>
+                                <p className="text-slate-600 leading-relaxed">
+                                    בצד שמאל למעלה לחץ על <strong>פריסה (Deploy) &gt; פריסה חדשה (New deployment)</strong>.<br/>
+                                    בחר סוג: <strong>Web App</strong>.<br/>
+                                    הגדר: <em>"מי רשאי ליזום גישה" (Who has access)</em> למצב: <strong className="text-emerald-700">כולם (Anyone)</strong>.
+                                </p>
+                            </div>
+
+                            {/* Step 4 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                                <div className="flex items-center gap-2 font-bold text-slate-900">
+                                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs">4</span>
+                                    <span>העתק את הקישור לכאן</span>
+                                </div>
+                                <p className="text-slate-600 leading-relaxed">
+                                    לחץ על <strong>Deploy</strong> (ואשר הרשאות גישה). העתק את הקישור שמתחיל ב-<code>https://script.google.com/.../exec</code> והדבק אותו בשדה למעלה!
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Display Code Box */}
+                        <div className="space-y-2">
+                            <label className="block text-xs font-bold text-slate-700">קוד Google Apps Script המלא:</label>
+                            <pre className="bg-slate-900 text-emerald-400 text-xs p-4 rounded-2xl overflow-x-auto font-mono dir-ltr text-left">
+                                {GOOGLE_APPS_SCRIPT_CODE}
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render React DOM
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
